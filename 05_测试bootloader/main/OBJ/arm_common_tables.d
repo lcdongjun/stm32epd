@@ -1,0 +1,10 @@
+..\obj\arm_common_tables.o: ..\FWLIB\DSP_Lib\Source\CommonTables\arm_common_tables.c
+..\obj\arm_common_tables.o: ..\FWLIB\DSP_Lib\Include\arm_math.h
+..\obj\arm_common_tables.o: ..\FWLIB\DSP_Lib\Include\core_cm4.h
+..\obj\arm_common_tables.o: D:\mcu\Keil_v5\ARM\ARMCC\Bin\..\include\stdint.h
+..\obj\arm_common_tables.o: ..\CORE\core_cmInstr.h
+..\obj\arm_common_tables.o: ..\CORE\core_cmFunc.h
+..\obj\arm_common_tables.o: ..\FWLIB\DSP_Lib\Include\core_cmSimd.h
+..\obj\arm_common_tables.o: D:\mcu\Keil_v5\ARM\ARMCC\Bin\..\include\string.h
+..\obj\arm_common_tables.o: D:\mcu\Keil_v5\ARM\ARMCC\Bin\..\include\math.h
+..\obj\arm_common_tables.o: ..\FWLIB\DSP_Lib\Include\arm_common_tables.h
