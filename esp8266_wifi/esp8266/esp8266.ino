@@ -2,7 +2,7 @@
 #include <ESP8266WebServer.h>
 #include <ArduinoJson.h> // 包含 ArduinoJson 库
 // WiFi 配置
-const char* ssid = "ESP8266_Hotspot";
+const char* ssid = "EPD_Hotspot";
 const char* password = "12345678";
 
 // 创建 WebServer 对象
@@ -16,31 +16,31 @@ String currentCity = "leshan"; // 默认城市
 
 // 发送 reboot_to_bootloader 命令
 void handleRebootToBootloader() {
-  Serial.println("reboot_to_bootloader");
+  Serial.println("AT+Reboot_to_bootloader");
   server.send(200, "text/plain", "Command sent: reboot_to_bootloader");
 }
 // 发送 reboot_to_system 命令
 void handleRebootToSystem() {
-  Serial.println("reboot_to_system");
+  Serial.println("AT+Reboot_to_system");
   server.send(200, "text/plain", "Command sent: reboot_to_system");
 }
 
 // 开关操作
 void handleToggleSwitch() {
   flage = !flage; // 切换开关状态
-  Serial.println("toggle:");
+  Serial.print("AT+Toggle_status=");
   Serial.println(flage ? "1" : "0");
   server.send(200, "text/plain", flage ? "1" : "0");
 }
 void handlefanSwitch() {
   fan = !fan; // 切换开关状态
-  Serial.println("fan:");
+  Serial.print("AT+Fan_status=");
   Serial.println(fan ? "1" : "0");
   server.send(200, "text/plain", fan ? "1" : "0");
 }
 void handlecameraSwitch() {
   camera = !camera; // 切换开关状态
-  Serial.println("camera:");
+  Serial.print("AT+Camera_status=");
   Serial.println(camera ? "1" : "0");
   server.send(200, "text/plain", camera ? "1" : "0");
 }
@@ -58,6 +58,7 @@ void handleSetTime() {
     if (hour >= 0 && hour < 24 && minute >= 0 && minute < 60 && second >= 0 && second < 60&&year >= 2000 && year < 2099 && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
       char timeStr[100];
       sprintf(timeStr, "y:%02d,mh:%02d,d:%02d,h:%02d,m:%02d,s:%02d", year,month,day,hour, minute, second);
+      Serial.print("AT+Time_set="); 
       Serial.println(timeStr); // 通过串口发送时间
       server.send(200, "text/plain", String("Time set: ") + timeStr);
       return;
@@ -71,15 +72,97 @@ void handleFileUpload() {
   HTTPUpload& upload = server.upload();
   if (upload.status == UPLOAD_FILE_START) {
     // Serial.printf("Start uploading: %s\n", upload.filename.c_str());
+    Serial.println("AT+UploadDate=");
   } else if (upload.status == UPLOAD_FILE_WRITE) {
     Serial.write(upload.buf, upload.currentSize); // 直接发送接收到的数据块
     // Serial.printf("Uploaded %d bytes\n", upload.currentSize);
   } else if (upload.status == UPLOAD_FILE_END) {
     // Serial.printf("\nUpload finished: %s (%d bytes)\n", upload.filename.c_str(), upload.totalSize);
-    Serial.printf("\nUpload end\n");
+    Serial.println("AT+UploadEnd");
   }
 }
 
+// 获取天气信息
+String getWeather() {
+  WiFiClient client;
+  const char* server = "api.seniverse.com";
+  const int port = 80;
+  const char* apiKey = "S0WNrNaWM7M7aqKcO";
+  const char* language = "en";
+  const char* unit = "c";
+
+
+  // 使用用户输入的城市
+  String url = String("/v3/weather/daily.json?key=") + apiKey +
+               "&location=" + currentCity + 
+               "&language=" + language +
+               "&unit=" + unit+
+               "&start=0"+
+               "&days=3";
+
+  if (client.connect(server, port)) {
+    client.print(String("GET ") + url + " HTTP/1.1\r\n");
+    client.print(String("Host: ") + server + "\r\n");
+    client.print("Connection: close\r\n\r\n");
+
+  String response = "";
+    while (client.connected() || client.available()) {
+      if (client.available()) {
+        String line = client.readStringUntil('\n');
+        if (line.startsWith("{")) {
+          response = line; // 获取 JSON 响应体
+          break;
+        }
+      }
+    }
+    client.stop();
+
+    if (response.length() > 0) {
+      // 解析 JSON 数据
+      StaticJsonDocument<2048> doc; // 确保足够大的缓冲区
+      DeserializationError error = deserializeJson(doc, response);
+
+      if (!error) {
+        String result = "";
+        const char* cityName = doc["results"][0]["location"]["name"];
+        // const char* lastUpdate = doc["results"][0]["last_update"];
+        JsonArray dailyArray = doc["results"][0]["daily"];
+
+        result += "\n" + String(cityName) + "\n";
+        // result += "Last Update: " + String(lastUpdate) + "\n";
+
+        // 获取前三天的天气数据
+        for (size_t i = 0; i < 3 && i < dailyArray.size(); i++) {
+          JsonObject day = dailyArray[i];
+
+          const char* date = day["date"];
+          const char* textDay = day["text_day"];
+          const char* textNight = day["text_night"];
+          const char* high = day["high"];
+          const char* low = day["low"];
+          const char* precip = day["precip"];
+
+          result += "Date: " + String(date) + "\n";
+          result += "  Day: " + String(textDay) + "\n";                                                                                   
+          result += "  Night: " + String(textNight) + "\n";
+          result += "  High Temp: " + String(high) + "\n";
+          result += "  Low Temp: " + String(low) + "\n";
+          result += "  Precipitation: " + String(precip) + "\n";
+        }
+
+        return result; // 返回格式化的结果
+      } else {
+        Serial.println("Failed to parse weather JSON.");
+        return "Weather fetch failed.";
+      }
+    } else {
+      Serial.println("No response from weather server.");
+      return "Weather fetch failed.";
+    }
+  }
+
+  return "Weather fetch failed.";
+}
 
 // 提供上传页面
 void handleRoot() {
@@ -393,21 +476,21 @@ void handleRoot() {
 }
 
 void connectToWiFiAndFetchWeather() {
-  const char* wifiSSID = "Xiaomi_E42D";       // 替换为实际的 WiFi 名称
-  const char* wifiPassword = "q7579364"; // 替换为实际的 WiFi 密码
+  const char* wifiSSID = "WiFiSSID";       // 替换为实际的 WiFi 名称
+  const char* wifiPassword = "q7579364."; // 替换为实际的 WiFi 密码
 
   WiFi.begin(wifiSSID, wifiPassword);
-  // Serial.println("Connecting to WiFi...");
+  Serial.println("Connecting to WiFi...");
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
-    // Serial.print(".");
+    Serial.print(".");
   }
-  // Serial.println("\nConnected to WiFi.");
-  // Serial.println("Local IP: " + WiFi.localIP().toString());
+  Serial.println("\nConnected to WiFi.");
+  Serial.println("Local IP: " + WiFi.localIP().toString());
   
   // 获取天气信息
   String weather = getWeather();
-  Serial.println("Weather Info:");
+  Serial.print("AT+Weather_info=");
   Serial.println(weather); // 输出天气信息到串口
 }
 
@@ -418,87 +501,6 @@ void setupHotspot() {
   Serial.println("Hotspot mode enabled.");
 }
 
-// 获取天气信息
-String getWeather() {
-  WiFiClient client;
-  const char* server = "api.seniverse.com";
-  const int port = 80;
-  const char* apiKey = "S0WNrNaWM7M7aqKcO";
-  const char* language = "en";
-  const char* unit = "c";
-
-
-  // 使用用户输入的城市
-  String url = String("/v3/weather/daily.json?key=") + apiKey +
-               "&location=" + currentCity + 
-               "&language=" + language +
-               "&unit=" + unit+
-               "&start=0"+
-               "&days=3";
-
-  if (client.connect(server, port)) {
-    client.print(String("GET ") + url + " HTTP/1.1\r\n");
-    client.print(String("Host: ") + server + "\r\n");
-    client.print("Connection: close\r\n\r\n");
-
-  String response = "";
-    while (client.connected() || client.available()) {
-      if (client.available()) {
-        String line = client.readStringUntil('\n');
-        if (line.startsWith("{")) {
-          response = line; // 获取 JSON 响应体
-          break;
-        }
-      }
-    }
-    client.stop();
-
-    if (response.length() > 0) {
-      // 解析 JSON 数据
-      StaticJsonDocument<2048> doc; // 确保足够大的缓冲区
-      DeserializationError error = deserializeJson(doc, response);
-
-      if (!error) {
-        String result = "";
-        const char* cityName = doc["results"][0]["location"]["name"];
-        const char* lastUpdate = doc["results"][0]["last_update"];
-        JsonArray dailyArray = doc["results"][0]["daily"];
-
-        result += "City: " + String(cityName) + "\n";
-        result += "Last Update: " + String(lastUpdate) + "\n";
-
-        // 获取前三天的天气数据
-        for (size_t i = 0; i < 3 && i < dailyArray.size(); i++) {
-          JsonObject day = dailyArray[i];
-
-          const char* date = day["date"];
-          const char* textDay = day["text_day"];
-          const char* textNight = day["text_night"];
-          const char* high = day["high"];
-          const char* low = day["low"];
-          const char* precip = day["precip"];
-
-          result += "Date: " + String(date) + "\n";
-          result += "  Day: " + String(textDay) + "\n";                                                                                   
-          result += "  Night: " + String(textNight) + "\n";
-          result += "  High Temp: " + String(high) + "\n";
-          result += "  Low Temp: " + String(low) + "\n";
-          result += "  Precipitation: " + String(precip) + "\n";
-        }
-
-        return result; // 返回格式化的结果
-      } else {
-        Serial.println("Failed to parse weather JSON.");
-        return "Weather fetch failed.";
-      }
-    } else {
-      Serial.println("No response from weather server.");
-      return "Weather fetch failed.";
-    }
-  }
-
-  return "Weather fetch failed.";
-}
 
 // 解析键值对数据的值
 bool parseValue(String data, String key) {
@@ -556,7 +558,7 @@ void setup() {
   server.on("/set_city", HTTP_POST, []() {
     if (server.hasArg("city")) {
       currentCity = server.arg("city"); // 获取用户输入的城市名
-      Serial.println("City updated to: " + currentCity);
+      Serial.println("AT+City_set=" + currentCity);
       server.send(200, "text/plain", "City updated");
     } else {
       server.send(400, "text/plain", "City name missing");
@@ -566,7 +568,7 @@ void setup() {
   server.on("/fileSize", HTTP_POST, []() {
     if (server.hasArg("plain")) {
       String body = server.arg("plain");
-      Serial.println("File size: " + body);
+      Serial.println("AT+UploadStart=" + body);
       server.send(200, "application/json", "{\"status\":\"file size received\"}");
     } else {
       server.send(400, "application/json", "{\"error\":\"no data received\"}");
@@ -593,7 +595,4 @@ void loop() {
     }
   }
 }
-
-
-//测试github
 
